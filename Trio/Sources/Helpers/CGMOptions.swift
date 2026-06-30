@@ -1,3 +1,5 @@
+import LinxCGMKit
+
 let cgmOptions: [CGMOption] = [
     CGMOption(name: "Dexcom G5", predicate: { $0.type == .plugin && $0.displayName.contains("G5") }),
     CGMOption(name: "Dexcom G6 / ONE", predicate: { $0.type == .plugin && $0.displayName.contains("G6") }),
@@ -7,6 +9,10 @@ let cgmOptions: [CGMOption] = [
     CGMOption(
         name: "FreeStyle Libre Demo",
         predicate: { $0.type == .plugin && $0.displayName == "FreeStyle Libre Demo" }
+    ),
+    CGMOption(
+        name: "LINX CGM",
+        predicate: { $0.type == .plugin && $0.id == LinxCGMManager.pluginIdentifier }
     ),
     CGMOption(name: "Glucose Simulator", predicate: { $0.type == .simulator }),
     CGMOption(name: "Medtronic Enlite", predicate: { $0.type == .enlite }),

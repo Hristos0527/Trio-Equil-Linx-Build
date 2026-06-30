@@ -291,6 +291,12 @@ final class BaseFetchGlucoseManager: FetchGlucoseManager, Injectable {
     }
 
     private func overcalibrate(entries: [BloodGlucose]) -> [BloodGlucose] {
+        // LinxCGMKit applies its own two-point calibration in LinxDecoder; skip Trio
+        // CalibrationService so we don't create a second, offset glucose stream on NS.
+        if cgmManager?.pluginIdentifier == "LinxCGMManager" {
+            return entries
+        }
+
         // overcalibrate
         var overcalibration: ((Int) -> (Double))?
 

@@ -6,7 +6,7 @@ extension BaseNightscoutManager {
     /// Call once from init. Hooks up:
     /// 1) external upload requests (NotificationCenter)
     /// 2) Core Data change triggers → requests per upload pipeline
-    /// 3) Glucose storage updates → request glucose pipeline
+    /// 3) batch glucose inserts (NSBatchInsertRequest) via updatePublisher
     func wireSubscribers() {
         wireExternalUploadRequests()
         wireCoreDataSubscribers()

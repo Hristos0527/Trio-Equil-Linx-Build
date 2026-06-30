@@ -319,6 +319,14 @@ extension Home {
             broadcaster.register(PumpReservoirObserver.self, observer: self)
             broadcaster.register(PumpDeactivatedObserver.self, observer: self)
 
+            Foundation.NotificationCenter.default.addObserver(
+                forName: .memoryPressureTrimUICaches,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                self?.trimGlucoseCaches()
+            }
+
             timer.eventHandler = {
                 DispatchQueue.main.async { [weak self] in
                     self?.timerDate = Date()

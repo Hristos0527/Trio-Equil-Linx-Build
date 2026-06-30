@@ -41,7 +41,7 @@ struct TrioSettings: JSON, Equatable, Encodable {
     var carbsRequiredThreshold: Decimal = 10
     var showCarbsRequiredBadge: Bool = true
     var useFPUconversion: Bool = false
-    var individualAdjustmentFactor: Decimal = 0.5
+    var individualAdjustmentFactor: Decimal = 0.6
     var minuteInterval: Decimal = 30
     var delay: Decimal = 60
     var useAppleHealth: Bool = false

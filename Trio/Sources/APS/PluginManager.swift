@@ -4,6 +4,8 @@ import G7SensorKit
 import G7SensorKitUI
 import LibreTransmitter
 import LibreTransmitterUI
+import LinxCGMKit
+import LinxCGMKitUI
 import LoopKit
 import LoopKitUI
 import Swinject
@@ -40,6 +42,11 @@ class BasePluginManager: Injectable, PluginManager {
             pluginIdentifier: LibreTransmitterManagerV3.pluginIdentifier,
             localizedTitle: String(localized: "FreeStyle Libre"),
             manager: LibreTransmitterManagerV3.self
+        ),
+        CgmPluginDescription(
+            pluginIdentifier: LinxCGMManager.pluginIdentifier,
+            localizedTitle: String(localized: "LINX CGM"),
+            manager: LinxCGMManager.self
         )
     ]
 

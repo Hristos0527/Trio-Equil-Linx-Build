@@ -124,20 +124,20 @@ import Testing
     }
 
     @Test(
-        "Store carb entry with fat/protein creates capped, spaced FPU entries (defaults: adjustment=0.5, delay=60m)"
+        "Store carb entry with fat/protein creates capped, spaced FPU entries (defaults: adjustment=0.6, delay=60m)"
     ) func testStoreFatProteinCarbEntryCreatesFPUEntries() async throws {
         let fpuID = UUID().uuidString
         let baseDate = Date(timeIntervalSince1970: 1_700_000_000)
 
         // Defaults:
-        // adjustment = 0.5, delay = 60
+        // adjustment = 0.6, delay = 60
         //
         // fat=50g -> 450 kcal
         // protein=100g -> 400 kcal
         // kcal total = 850
         // (kcal/10) = 85
-        // 85 * 0.5 = 42.5
-        // Int(42.5) = 42 equivalents -> two FPU entries: 21g each
+        // 85 * 0.6 = 51
+        // Int(51) = 51 equivalents -> two FPU entries: 26g + 25g
         let mealEntry = CarbsEntry(
             id: UUID().uuidString,
             createdAt: baseDate,
@@ -175,7 +175,7 @@ import Testing
 
         let fpuEntries = storedEntries.filter { $0.isFPU == true }
         #expect(fpuEntries.count == 2, "Expected exactly one FPU entry under default settings")
-        #expect(Int(fpuEntries[0].carbs) == 21, "Expected 20g carb equivalents under default settings")
+        #expect(Int(fpuEntries[0].carbs) == 26, "Expected 26g carb equivalents under default settings")
 
         for fpuEntry in fpuEntries {
             #expect(fpuEntry.fat == 0, "FPU fat must be 0")
@@ -209,19 +209,19 @@ import Testing
     }
 
     @Test(
-        "Store very large fat/protein meal caps FPU equivalents at 99g and splits into 3×33g (defaults: adjustment=0.5, delay=60m)"
+        "Store very large fat/protein meal caps FPU equivalents at 99g and splits into 3×33g (defaults: adjustment=0.6, delay=60m)"
     ) func testStoreVeryLargeFatProteinMealCapsAndSplits() async throws {
         let fpuID = UUID().uuidString
         let baseDate = Date(timeIntervalSince1970: 1_700_001_000)
 
         // Defaults:
-        // adjustment = 0.5, delay = 60
+        // adjustment = 0.6, delay = 60
         //
         // fat=200g -> 1800 kcal
         // protein=200g -> 800 kcal
         // kcal total = 2600
         // (kcal/10) = 260
-        // 260 * 0.5 = 130
+        // 260 * 0.6 = 156
         // Int(130) = 130 -> capped to 99 -> split into [33, 33, 33]
         let heftyMealEntry = CarbsEntry(
             id: UUID().uuidString,
@@ -299,19 +299,19 @@ import Testing
     }
 
     @Test(
-        "Store small fat/protein meal drops FPU equivalents when total would be <10g (defaults: adjustment=0.5, delay=60m)"
+        "Store small fat/protein meal drops FPU equivalents when total would be <10g (defaults: adjustment=0.6, delay=60m)"
     ) func testStoreSmallFatProteinMealDropsFPUBelowMinimum() async throws {
         let fpuID = UUID().uuidString
         let baseDate = Date(timeIntervalSince1970: 1_700_002_000)
 
         // Defaults:
-        // adjustment = 0.5
+        // adjustment = 0.6
         //
         // fat=2g -> 18 kcal
         // protein=2g -> 8 kcal
         // kcal total = 26
         // (kcal/10) = 2.6
-        // 2.6 * 0.5 = 1.3
+        // 2.6 * 0.6 = 1.56
         // Int(1.3) = 1 (<10) -> should be dropped (no FPU entries)
         let smallMealEntry = CarbsEntry(
             id: UUID().uuidString,
@@ -355,6 +355,75 @@ import Testing
             storedEntries.allSatisfy { $0.fpuID?.uuidString == fpuID },
             "All entries should share the same fpuID"
         )
+    }
+
+    @Test(
+        "Batch NS import stores every split-meal entry and FPU from the F/P portion, not only the last"
+    ) func testStoreSplitMealBatchFromNightscout() async throws {
+        let fpuID = UUID().uuidString
+        let baseDate = Date(timeIntervalSince1970: 1_700_003_000)
+        let delayedDate = baseDate.addingTimeInterval(120 * 60)
+
+        // FoodPhotoTrio split: CHO 1/2 with full F/P, then CHO 2/2 without F/P.
+        // fat=50, protein=100 -> 51 FPU equivalents at adjustment 0.6 (same as single-meal test).
+        let immediateEntry = CarbsEntry(
+            id: UUID().uuidString,
+            createdAt: baseDate,
+            actualDate: baseDate,
+            carbs: 25,
+            fat: 50,
+            protein: 100,
+            note: "FoodPhotoTrio · CHO 1/2 · Chips · P 100g · F 50g",
+            enteredBy: "FoodPhotoTrio",
+            isFPU: false,
+            fpuID: fpuID
+        )
+        let delayedEntry = CarbsEntry(
+            id: UUID().uuidString,
+            createdAt: delayedDate,
+            actualDate: delayedDate,
+            carbs: 25,
+            fat: 0,
+            protein: 0,
+            note: "FoodPhotoTrio · CHO 2/2 (+25g, +120 perc) · Chips",
+            enteredBy: "FoodPhotoTrio",
+            isFPU: false,
+            fpuID: nil
+        )
+
+        try await storage.storeCarbs([immediateEntry, delayedEntry], areFetchedFromRemote: true)
+
+        let nonFpuEntries = try await coreDataStack.fetchEntitiesAsync(
+            ofType: CarbEntryStored.self,
+            onContext: testContext,
+            predicate: NSPredicate(format: "isFPU == false"),
+            key: "date",
+            ascending: true
+        ) as? [CarbEntryStored]
+
+        guard let nonFpuEntries else {
+            throw TestError("Failed to fetch non-FPU entries")
+        }
+
+        #expect(nonFpuEntries.count == 2, "Both split CHO entries must be stored")
+        #expect(nonFpuEntries[0].fat == 50, "First entry should retain fat")
+        #expect(nonFpuEntries[0].protein == 100, "First entry should retain protein")
+        #expect(nonFpuEntries[1].fat == 0, "Delayed entry should be CHO-only")
+        #expect(nonFpuEntries[1].protein == 0, "Delayed entry should be CHO-only")
+
+        let fpuEntries = try await coreDataStack.fetchEntitiesAsync(
+            ofType: CarbEntryStored.self,
+            onContext: testContext,
+            predicate: NSPredicate(format: "fpuID == %@ AND isFPU == true", fpuID),
+            key: "date",
+            ascending: true
+        ) as? [CarbEntryStored]
+
+        guard let fpuEntries else {
+            throw TestError("Failed to fetch FPU entries")
+        }
+
+        #expect(fpuEntries.count == 2, "FPU should be created from the first entry's fat/protein")
     }
 
     @Test("Get carbs not yet uploaded to Nightscout") func testGetCarbsNotYetUploadedToNightscout() async throws {

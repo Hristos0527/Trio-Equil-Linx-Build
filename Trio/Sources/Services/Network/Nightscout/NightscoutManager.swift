@@ -139,6 +139,13 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
     /// Bag for Combine subscriptions owned by this manager.
     var subscriptions = Set<AnyCancellable>()
 
+    /// Prevents overlapping glucose upload tasks from racing before `isUploadedToNS` is saved.
+    private var glucoseUploadInFlight = false
+
+    /// Recently uploaded (minute, sgv) pairs — blocks duplicate identical NS entries when
+    /// multiple triggers fire for the same reading.
+    private var recentGlucoseUploadFingerprints = Set<String>()
+
     init(resolver: Resolver) {
         injectServices(resolver)
         subscribe()
@@ -823,19 +830,127 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
             return
         }
 
+        guard !glucoseUploadInFlight else {
+            debug(.nightscout, "Glucose upload already in flight — skipping duplicate request")
+            return
+        }
+        glucoseUploadInFlight = true
+        defer { glucoseUploadInFlight = false }
+
+        let batchDeduped = Self.dedupeGlucoseBatch(glucose)
+            .filter { entry in
+                guard let fingerprint = glucoseUploadFingerprint(for: entry) else { return true }
+                return !recentGlucoseUploadFingerprints.contains(fingerprint)
+            }
+        let (toUpload, alreadyOnNS) = await filterGlucoseAlreadyOnNightscout(batchDeduped, using: nightscout)
+
+        guard !toUpload.isEmpty else {
+            if !alreadyOnNS.isEmpty {
+                recordUploadedGlucoseFingerprints(alreadyOnNS)
+                await updateGlucoseAsUploaded(alreadyOnNS)
+                debug(.nightscout, "Skipped \(alreadyOnNS.count) glucose entries already on Nightscout")
+            }
+            return
+        }
+
         do {
             // Upload in Batches of 100
-            for chunk in glucose.chunks(ofCount: 100) {
+            for chunk in toUpload.chunks(ofCount: 100) {
                 try await nightscout.uploadGlucose(Array(chunk))
             }
 
-            // If successful, update the isUploadedToNS property of the GlucoseStored objects
-            await updateGlucoseAsUploaded(glucose)
+            recordUploadedGlucoseFingerprints(toUpload + alreadyOnNS)
 
-            debug(.nightscout, "Glucose uploaded")
+            // Mark uploaded entries and any NS duplicates we skipped as uploaded locally
+            await updateGlucoseAsUploaded(toUpload + alreadyOnNS)
+
+            if alreadyOnNS.isEmpty {
+                debug(.nightscout, "Glucose uploaded (\(toUpload.count))")
+            } else {
+                debug(
+                    .nightscout,
+                    "Glucose uploaded (\(toUpload.count)); skipped \(alreadyOnNS.count) duplicate(s) already on Nightscout"
+                )
+            }
         } catch {
             debug(.nightscout, "Upload of glucose failed: \(error)")
         }
+    }
+
+    private func glucoseUploadFingerprint(for entry: BloodGlucose) -> String? {
+        guard let sgv = entry.sgv ?? entry.glucose else { return nil }
+        let minuteBucket = Int(entry.dateString.timeIntervalSince1970 / 60)
+        return "\(minuteBucket)-\(sgv)"
+    }
+
+    private func recordUploadedGlucoseFingerprints(_ glucose: [BloodGlucose]) {
+        let cutoffMinute = Int(Date().timeIntervalSince1970 / 60) - 30
+        recentGlucoseUploadFingerprints = recentGlucoseUploadFingerprints.filter { key in
+            guard let minute = Int(key.split(separator: "-").first ?? "") else { return false }
+            return minute >= cutoffMinute
+        }
+        for entry in glucose {
+            if let fingerprint = glucoseUploadFingerprint(for: entry) {
+                recentGlucoseUploadFingerprints.insert(fingerprint)
+            }
+        }
+    }
+
+    /// Skip POST when NS already has the same sgv at the same time (±60 s), regardless of `device`.
+    private func filterGlucoseAlreadyOnNightscout(
+        _ glucose: [BloodGlucose],
+        using nightscout: NightscoutAPI
+    ) async -> (toUpload: [BloodGlucose], alreadyOnNS: [BloodGlucose]) {
+        guard let oldest = glucose.map(\.dateString).min() else {
+            return (glucose, [])
+        }
+
+        do {
+            let existing = try await nightscout.fetchLastGlucose(sinceDate: oldest.addingTimeInterval(-60))
+            var toUpload: [BloodGlucose] = []
+            var alreadyOnNS: [BloodGlucose] = []
+            for entry in glucose {
+                if Self.matchesExistingNightscoutEntry(entry, in: existing) {
+                    alreadyOnNS.append(entry)
+                } else {
+                    toUpload.append(entry)
+                }
+            }
+            return (toUpload, alreadyOnNS)
+        } catch {
+            debug(.nightscout, "NS glucose dedup fetch failed, uploading all: \(error)")
+            return (glucose, [])
+        }
+    }
+
+    private static func dedupeGlucoseBatch(_ glucose: [BloodGlucose]) -> [BloodGlucose] {
+        var seen: Set<String> = []
+        var result: [BloodGlucose] = []
+        for entry in glucose {
+            let key = glucoseDedupKey(for: entry)
+            if seen.insert(key).inserted {
+                result.append(entry)
+            }
+        }
+        return result
+    }
+
+    private static func glucoseDedupKey(for entry: BloodGlucose) -> String {
+        let sgv = entry.sgv ?? entry.glucose ?? 0
+        let bucket = Int(entry.dateString.timeIntervalSince1970 / 30)
+        return "\(bucket)|\(sgv)"
+    }
+
+    private static func matchesExistingNightscoutEntry(_ entry: BloodGlucose, in existing: [BloodGlucose]) -> Bool {
+        let sgv = entry.sgv ?? entry.glucose ?? 0
+        for candidate in existing {
+            let candidateSgv = candidate.sgv ?? candidate.glucose ?? 0
+            guard candidateSgv == sgv else { continue }
+            if abs(candidate.dateString.timeIntervalSince(entry.dateString)) <= 60 {
+                return true
+            }
+        }
+        return false
     }
 
     private func updateGlucoseAsUploaded(_ glucose: [BloodGlucose]) async {

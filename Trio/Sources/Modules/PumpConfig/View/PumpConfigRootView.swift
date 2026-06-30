@@ -123,6 +123,7 @@ extension PumpConfig {
                                     Text("• Omnipod DASH")
                                     Text("• Dana (RS/-i)")
                                     Text("• Medtrum Nano (200u/300u)")
+                                    Text("• Equil Patch (5.3/5.4)")
                                     Text("• Pump Simulator")
                                 }
                                 Text(
@@ -138,6 +139,7 @@ extension PumpConfig {
                     Button("All Omnipod Types") { state.addPump(.omni) }
                     Button("Dana(RS/-i)") { state.addPump(.dana) }
                     Button("Medtrum Nano") { state.addPump(.medtrum) }
+                    Button("Equil Patch") { state.addPump(.equil) }
                     Button("Pump Simulator") { state.addPump(.simulator) }
                 } message: { Text("Select Pump Model") }
             }

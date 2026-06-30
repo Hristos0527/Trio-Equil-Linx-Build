@@ -2,6 +2,7 @@ import Algorithms
 import Combine
 import CoreData
 import DanaKit
+import EquilKit
 import Foundation
 import HealthKit
 import LoopKit
@@ -40,6 +41,7 @@ private let staticPumpManagers: [PumpManagerUI.Type] = [
     OmniPumpManager.self,
     DanaKitPumpManager.self,
     MedtrumPumpManager.self,
+    EquilPumpManager.self,
     MockPumpManager.self
 ]
 
@@ -48,6 +50,7 @@ private let staticPumpManagersByIdentifier: [String: PumpManagerUI.Type] = [
     OmniPumpManager.pluginIdentifier: OmniPumpManager.self,
     DanaKitPumpManager.pluginIdentifier: DanaKitPumpManager.self,
     MedtrumPumpManager.pluginIdentifier: MedtrumPumpManager.self,
+    EquilPumpManager.pluginIdentifier: EquilPumpManager.self,
     MockPumpManager.pluginIdentifier: MockPumpManager.self
 ]
 
@@ -142,6 +145,17 @@ final class BaseDeviceDataManager: DeviceDataManager, Injectable {
                     case .extended:
                         pumpActivatedAtDate.send(medtrumPump.state.patchActivatedAt)
                     }
+                }
+                if let equilPump = pumpManager as? EquilPumpManager {
+                    pumpExpiresAtDate.send(nil)
+                    pumpActivatedAtDate.send(equilPump.state.activatedAt)
+                    storage.save(Decimal(equilPump.state.reservoir), as: OpenAPS.Monitor.reservoir)
+                    DispatchQueue.main.async {
+                        self.broadcaster.notify(PumpReservoirObserver.self, on: .main) {
+                            $0.pumpReservoirDidChange(Decimal(equilPump.state.reservoir))
+                        }
+                    }
+                    saveEquilPatchBattery(percent: equilPump.state.battery)
                 }
                 if let omni = pumpManager as? OmniPumpManager {
                     guard let endTime = omni.state.podState?.expiresAt else {
@@ -510,6 +524,14 @@ extension BaseDeviceDataManager: PumpManagerDelegate {
             }
         }
 
+        if let equilPump = pumpManager as? EquilPumpManager {
+            storage.save(Decimal(equilPump.state.reservoir), as: OpenAPS.Monitor.reservoir)
+            broadcaster.notify(PumpReservoirObserver.self, on: processQueue) {
+                $0.pumpReservoirDidChange(Decimal(equilPump.state.reservoir))
+            }
+            saveEquilPatchBattery(percent: equilPump.state.battery)
+        }
+
         if let omni = pumpManager as? OmniPumpManager {
             let reservoirVal = omni.state.podState?.lastInsulinMeasurements?.reservoirLevel ?? 0xDEAD_BEEF
             // TODO: find the value Pod.maximumReservoirReading
@@ -731,6 +753,60 @@ extension BaseDeviceDataManager: AlertObserver {
 
             self.broadcaster.notify(pumpNotificationObserver.self, on: self.processQueue) {
                 $0.pumpNotification(alert: alert)
+            }
+        }
+    }
+
+    /// Equil patch `state.battery` MÁR százalék (0–100, CmdHistoryGet) — NEM feszültség.
+    /// Ezt adjuk tovább a HUD/Core Data felé közvetlenül; NINCS feszültség→% képlet
+    /// (a régi `(voltage-2.0)/0.8*100` a 79%-ot ~100%-ra ugratta a clamp miatt).
+    private func saveEquilPatchBattery(percent rawPercent: Double) {
+        // 0 = még nincs érvényes olvasás (alapértelmezett); ne írjunk display=false Core Data-ba.
+        guard rawPercent > 0 else { return }
+
+        let percent = Double(min(max(rawPercent, 0), 100))
+        let battery = Battery(
+            percent: Int(percent),
+            voltage: nil,
+            string: percent > 10 ? .normal : .low,
+            display: true
+        )
+
+        Task {
+            await self.privateContext.perform {
+                let fetchRequest: NSFetchRequest<OpenAPS_Battery> = OpenAPS_Battery.fetchRequest()
+                fetchRequest.sortDescriptors = [NSSortDescriptor(key: "date", ascending: false)]
+                fetchRequest.predicate = NSPredicate.predicateFor30MinAgo
+                fetchRequest.fetchLimit = 1
+
+                do {
+                    let results = try self.privateContext.fetch(fetchRequest)
+                    let batteryToStore: OpenAPS_Battery
+
+                    if let existingBattery = results.first {
+                        batteryToStore = existingBattery
+                    } else {
+                        batteryToStore = OpenAPS_Battery(context: self.privateContext)
+                        batteryToStore.id = UUID()
+                    }
+
+                    batteryToStore.date = Date()
+                    batteryToStore.percent = percent
+                    batteryToStore.voltage = nil
+                    batteryToStore.status = percent > 10 ? BatteryState.normal.rawValue : BatteryState.low.rawValue
+                    batteryToStore.display = true
+
+                    guard self.privateContext.hasChanges else { return }
+                    try self.privateContext.save()
+                } catch {
+                    debug(.deviceManager, "Failed to save Equil patch battery: \(error)")
+                }
+            }
+        }
+
+        DispatchQueue.main.async {
+            self.broadcaster.notify(PumpBatteryObserver.self, on: .main) {
+                $0.pumpBatteryDidChange(battery)
             }
         }
     }

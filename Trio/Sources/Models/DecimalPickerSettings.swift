@@ -37,7 +37,7 @@ struct DecimalPickerSettings {
     var highGlucose = PickerSetting(value: 180, step: 5, min: 100, max: 400, type: PickerSetting.PickerSettingType.glucose)
     var carbsRequiredThreshold = PickerSetting(value: 10, step: 1, min: 0, max: 100, type: PickerSetting.PickerSettingType.gram)
     var individualAdjustmentFactor = PickerSetting(
-        value: 0.5,
+        value: 0.6,
         step: 0.05,
         min: 0.1,
         max: 1.2,

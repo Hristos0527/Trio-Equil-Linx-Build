@@ -7,7 +7,7 @@ extension MealSettings {
         @Published var maxCarbs: Decimal = 250
         @Published var maxFat: Decimal = 250
         @Published var maxProtein: Decimal = 250
-        @Published var individualAdjustmentFactor: Decimal = 0.5
+        @Published var individualAdjustmentFactor: Decimal = 0.6
         @Published var minuteInterval: Decimal = 30
         @Published var delay: Decimal = 60
         @Published var maxMealAbsorptionTime: Decimal = 6

@@ -94,7 +94,7 @@ struct PumpView: View {
                         Image(systemName: "battery.100")
                             .font(.callout)
                             .foregroundStyle(batteryColor)
-                        Text("\(Formatter.integerFormatter.string(for: battery.first?.percent ?? 100) ?? "100") %")
+                        Text("\(Int((battery.first?.percent ?? 100).rounded()))%")
                             .font(.callout).fontWeight(.bold).fontDesign(.rounded)
                     }
                 }

@@ -77,7 +77,12 @@ final class LiveActivityData: ObservableObject {
     /// A dispatch queue for handling Core Data change notifications.
     private let queue = DispatchQueue(label: "LiveActivityBridge.queue", qos: .userInitiated)
     private var coreDataPublisher: AnyPublisher<Set<NSManagedObjectID>, Never>?
+    private var glucoseInsertPublisher: AnyPublisher<Set<NSManagedObjectID>, Never>?
     private var subscriptions = Set<AnyCancellable>()
+    private var pushCoalesceTask: Task<Void, Never>?
+    private var backgroundThrottlingEnabled = false
+    private let foregroundPushCoalesceInterval: TimeInterval = 45
+    private let backgroundPushCoalesceInterval: TimeInterval = 90
 
     /// Initializes a new instance of `LiveActivityBridge` and sets up observers, subscribers, and notifications.
     ///
@@ -89,6 +94,12 @@ final class LiveActivityData: ObservableObject {
                 .share()
                 .eraseToAnyPublisher()
 
+        glucoseInsertPublisher =
+            changedObjectsOnManagedObjectContextDidSavePublisher(observing: .inserted)
+                .receive(on: queue)
+                .share()
+                .eraseToAnyPublisher()
+
         systemEnabled = activityAuthorizationInfo.areActivitiesEnabled
         injectServices(resolver)
         setupNotifications()
@@ -96,10 +107,7 @@ final class LiveActivityData: ObservableObject {
         monitorForLiveActivityAuthorizationChanges()
         broadcaster.register(SettingsObserver.self, observer: self)
         data.objectWillChange.sink { [weak self] in
-            Task { @MainActor in
-                // by the time this runs, the object change is done, so we see the new data here
-                await self?.pushCurrentContent()
-            }
+            self?.schedulePushCurrentContent()
         }.store(in: &subscriptions)
         loadInitialData()
     }
@@ -109,12 +117,12 @@ final class LiveActivityData: ObservableObject {
         let notificationCenter = Foundation.NotificationCenter.default
         notificationCenter
             .addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: nil) { [weak self] _ in
-                Task { @MainActor in
-                    await self?.pushCurrentContent()
-                }
+                self?.setBackgroundThrottling(enabled: true)
+                self?.schedulePushCurrentContent()
             }
         notificationCenter
             .addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] _ in
+                self?.setBackgroundThrottling(enabled: false)
                 Task { @MainActor in
                     await self?.pushCurrentContent()
                 }
@@ -136,8 +144,6 @@ final class LiveActivityData: ObservableObject {
             await self.pushCurrentContent()
         }
     }
-
-    /// Registers handlers for Core Data changes related to overrides, glucose readings, and determinations.
     private func registerHandler() {
         coreDataPublisher?.filteredByEntityName("OverrideStored").sink { [weak self] _ in
             Task { await self?.loadOverrides() }
@@ -147,9 +153,11 @@ final class LiveActivityData: ObservableObject {
             Task { await self?.loadTempTarget() }
         }.store(in: &subscriptions)
 
-        coreDataPublisher?.filteredByEntityName("GlucoseStored").sink { [weak self] _ in
-            Task { await self?.loadGlucose() }
-        }.store(in: &subscriptions)
+        glucoseInsertPublisher?.filteredByEntityName("GlucoseStored")
+            .debounce(for: .seconds(30), scheduler: DispatchQueue.global(qos: .utility))
+            .sink { [weak self] _ in
+                Task { await self?.loadGlucose() }
+            }.store(in: &subscriptions)
 
         coreDataPublisher?.filteredByEntityName("OrefDetermination")
             .debounce(for: .seconds(2), scheduler: DispatchQueue.global(qos: .utility))
@@ -162,6 +170,28 @@ final class LiveActivityData: ObservableObject {
             .sink { [weak self] _ in
                 self?.data.iob = self?.iobService.currentIOB
             }.store(in: &subscriptions)
+    }
+
+    /// Coalesces Live Activity pushes to avoid update storms from Core Data saves (e.g. glucose smoothing).
+    private func schedulePushCurrentContent() {
+        pushCoalesceTask?.cancel()
+        let interval = backgroundThrottlingEnabled ? backgroundPushCoalesceInterval : foregroundPushCoalesceInterval
+        pushCoalesceTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(interval))
+            guard !Task.isCancelled, let self else { return }
+            await self.pushCurrentContent()
+        }
+    }
+
+    func setBackgroundThrottling(enabled: Bool) {
+        backgroundThrottlingEnabled = enabled
+    }
+
+    func trimInMemoryCaches() {
+        data.glucoseFromPersistence = nil
+        context.performAndWait {
+            context.reset()
+        }
     }
 
     /// Fetches and maps new determination data and updates the live activity content state.

@@ -49,7 +49,7 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
 
         // Check for FPU-only entries (fat/protein without carbs)
         let fpuOnlyEntries = entriesToStore.filter { entry in
-            entry.carbs == 0 && (entry.fat ?? 0 > 0 || entry.protein ?? 0 > 0)
+            entry.carbs == 0 && ((entry.fat ?? 0) > 0 || (entry.protein ?? 0) > 0)
         }
 
         // Create additional Carb (non-FPU) entries with fat/protein amounts and carbs == 0
@@ -260,15 +260,17 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
     }
 
     private func saveCarbEquivalents(entries: [CarbsEntry], areFetchedFromRemote: Bool) async {
-        guard let lastEntry = entries.last else { return }
+        for entry in entries where entry.isFPU != true {
+            let fat = entry.fat ?? 0
+            let protein = entry.protein ?? 0
+            guard fat > 0 || protein > 0 else { continue }
 
-        if let fat = lastEntry.fat, let protein = lastEntry.protein, fat > 0 || protein > 0 {
             let (futureCarbEquivalents, carbEquivalentCount) = processFPU(
-                entries: entries,
+                entries: [entry],
                 fat: fat,
                 protein: protein,
-                createdAt: lastEntry.createdAt,
-                actualDate: lastEntry.actualDate
+                createdAt: entry.createdAt,
+                actualDate: entry.actualDate
             )
 
             if carbEquivalentCount > 0 {
@@ -278,23 +280,28 @@ final class BaseCarbsStorage: CarbsStorage, Injectable {
     }
 
     private func saveCarbsToCoreData(entries: [CarbsEntry], areFetchedFromRemote: Bool) async {
-        guard let entry = entries.last else { return }
+        guard entries.isNotEmpty else { return }
 
         await context.perform {
-            let newItem = CarbEntryStored(context: self.context)
-            newItem.date = entry.actualDate ?? entry.createdAt
-            newItem.carbs = Double(truncating: NSDecimalNumber(decimal: entry.carbs))
-            newItem.fat = Double(truncating: NSDecimalNumber(decimal: entry.fat ?? 0))
-            newItem.protein = Double(truncating: NSDecimalNumber(decimal: entry.protein ?? 0))
-            newItem.note = entry.note
-            newItem.id = UUID()
-            newItem.isFPU = false
-            newItem.isUploadedToNS = areFetchedFromRemote ? true : false
-            newItem.isUploadedToHealth = false
-            newItem.isUploadedToTidepool = false
+            for entry in entries where entry.isFPU != true {
+                let fat = entry.fat ?? 0
+                let protein = entry.protein ?? 0
 
-            if entry.fat != nil, entry.protein != nil, let fpuId = entry.fpuID {
-                newItem.fpuID = UUID(uuidString: fpuId)
+                let newItem = CarbEntryStored(context: self.context)
+                newItem.date = entry.actualDate ?? entry.createdAt
+                newItem.carbs = Double(truncating: NSDecimalNumber(decimal: entry.carbs))
+                newItem.fat = Double(truncating: NSDecimalNumber(decimal: fat))
+                newItem.protein = Double(truncating: NSDecimalNumber(decimal: protein))
+                newItem.note = entry.note
+                newItem.id = UUID()
+                newItem.isFPU = false
+                newItem.isUploadedToNS = areFetchedFromRemote ? true : false
+                newItem.isUploadedToHealth = false
+                newItem.isUploadedToTidepool = false
+
+                if let fpuId = entry.fpuID, fat > 0 || protein > 0 {
+                    newItem.fpuID = UUID(uuidString: fpuId)
+                }
             }
 
             do {

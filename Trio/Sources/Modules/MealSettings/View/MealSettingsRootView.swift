@@ -336,7 +336,7 @@ extension MealSettings {
                         label: String(localized: "Fat and Protein Percentage"),
                         miniHint: String(localized: "Adjust the Warsaw Method FPU Conversion rate."),
                         verboseHint: VStack(alignment: .leading, spacing: 10) {
-                            Text("Default: 50%").bold()
+                            Text("Default: 60%").bold()
                             VStack(spacing: 10) {
                                 Text("This setting changes how much effect the fat and protein entry has on FPUs.")
                                 VStack(alignment: .center, spacing: 5) {
@@ -350,7 +350,7 @@ extension MealSettings {
                                 .multilineTextAlignment(.center)
                                 .fixedSize(horizontal: false, vertical: true)
                                 Text(
-                                    "Tip: You may find that your normal carb ratio needs to increase to a larger number when you begin adding fat and protein entries. For this reason, it is best to start with a factor of about 50%."
+                                    "Tip: You may find that your normal carb ratio needs to increase to a larger number when you begin adding fat and protein entries. For this reason, it is best to start with a factor of about 60%."
                                 )
                             }
                         }

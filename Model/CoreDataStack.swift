@@ -560,6 +560,22 @@ extension CoreDataStack {
             debug(.coreData, "Error saving context \(DebuggingIdentifiers.failed): \(error)")
         }
     }
+
+    /// Drops faulted objects from the main view context to reclaim memory.
+    func trimViewContext() {
+        let context = persistentContainer.viewContext
+        context.performAndWait {
+            if context.hasChanges {
+                do {
+                    try context.save()
+                } catch {
+                    debug(.coreData, "Failed to save before viewContext reset: \(error)")
+                }
+            }
+            context.reset()
+            debug(.coreData, "viewContext reset for memory pressure")
+        }
+    }
 }
 
 extension NSManagedObjectContext {

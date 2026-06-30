@@ -267,7 +267,10 @@ final class BaseAPSManager: APSManager, Injectable {
     private func canStartNewLoop() async -> Bool {
         // Check if too soon for next loop
         if lastLoopDate > lastLoopStartDate {
-            guard lastLoopStartDate.addingTimeInterval(Config.loopInterval) < Date() else {
+            // A loop-kapu MINIMUMA a Linx-periódus (~3 perc) ALATT (loopGateMinimumInterval = 2,5 perc),
+            // hogy a ~3 percenként érkező Linx-minta a FÁZISCSÚSZÁS ellenére is mindig átmenjen és
+            // loopot indítson. A 3 perces ütem a cél; csak a kimaradást szüntetjük meg.
+            guard lastLoopStartDate.addingTimeInterval(Config.loopGateMinimumInterval) < Date() else {
                 debug(.apsManager, "Not enough time have passed since last loop at : \(lastLoopStartDate)")
                 return false
             }

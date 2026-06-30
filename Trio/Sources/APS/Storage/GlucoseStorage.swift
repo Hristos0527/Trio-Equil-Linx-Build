@@ -40,7 +40,12 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
     }
 
     private enum Config {
-        static let filterTime: TimeInterval = 3.5 * 60
+        // "Túl gyakori" glükóz szűrő: két TÁROLT minta közti minimum. A Linx ~3 percenként ad
+        // új mintát; 3,5 perces küszöbnél a ~3 perces minta KIESETT a tárolásból (és így a
+        // heartbeat/loop is elmaradt). A küszöböt a Linx-periódus ALÁ (2,5 perc) visszük, így
+        // minden ~3 perces minta tárolódik és loopot indít, de a sub-2,5perc duplikátumokat
+        // (ugyanazon csomag újraküldése) továbbra is kiszűrjük.
+        static let filterTime: TimeInterval = 2.5 * 60
     }
 
     private let context: NSManagedObjectContext
@@ -72,7 +77,7 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
     ///  the most challenging and most rare since it would happen if wearing two devices and
     ///  switching or moving from direct glucose handling to xdrip. It's not worth the complexity
     ///  to deal with source switching perfectly, so instead we will backfill glucose if and only if
-    ///  it isn't within 3.5 minutes of an existing glucose reading, which is simple but not perfect.
+    ///  it isn't within 2.5 minutes of an existing glucose reading, which is simple but not perfect.
     ///  But since this is a corner case that really shouldn't happen often, it's good enough.
     func backfillGlucose(_ glucose: [BloodGlucose]) async throws {
         try await context.perform {
@@ -83,11 +88,11 @@ final class BaseGlucoseStorage: GlucoseStorage, Injectable {
                 timeBuffer: 1
             )
 
-            // check for a 3.5 minute difference between existing values
+            // check for a 2.5 minute difference between existing values
             let filteredGlucose = self.filterGlucoseValues(
                 withoutDeletedGlucose,
                 fetchRequest: GlucoseStored.fetchRequest(),
-                timeBuffer: 3.5 * 60
+                timeBuffer: 2.5 * 60
             )
 
             guard !filteredGlucose.isEmpty else { return }

@@ -45,4 +45,12 @@ extension Home.StateModel {
         glucoseFromPersistence = objects
         latestTwoGlucoseValues = Array(objects.suffix(2))
     }
+
+    func trimGlucoseCaches() {
+        glucoseFetchContext.performAndWait {
+            glucoseFetchContext.reset()
+        }
+        glucoseFromPersistence = []
+        latestTwoGlucoseValues = []
+    }
 }

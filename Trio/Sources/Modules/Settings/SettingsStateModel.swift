@@ -1,4 +1,5 @@
 import CoreData
+import EquilKit
 import Foundation
 import LoopKit
 import LoopKitUI
@@ -53,6 +54,13 @@ extension Settings {
 
             if fileManager.fileExists(atPath: SimpleLogReporter.logFilePrev) {
                 items.append(URL(fileURLWithPath: SimpleLogReporter.logFilePrev))
+            }
+
+            let equilLog = EquilLogBuffer.shared.exportText()
+            if equilLog != "Equil napló üres." {
+                let equilURL = fileManager.temporaryDirectory.appendingPathComponent("equil-debug.log")
+                try? equilLog.write(to: equilURL, atomically: true, encoding: .utf8)
+                items.append(equilURL)
             }
 
             return items

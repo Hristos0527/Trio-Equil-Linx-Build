@@ -8,6 +8,7 @@ extension Notification.Name {
     static let initializationCompleted = Notification.Name("initializationCompleted")
     static let initializationError = Notification.Name("initializationError")
     static let onboardingCompleted = Notification.Name("onboardingCompleted")
+    static let memoryPressureTrimUICaches = Notification.Name("memoryPressureTrimUICaches")
 }
 
 @main struct TrioApp: App {
@@ -162,8 +163,8 @@ extension Notification.Name {
                     // Only load services after successful Core Data initialization
                     loadServices()
 
-                    // Clear the persistentHistory and the NSManagedObjects that are older than 90 days every time the app starts
-                    cleanupOldData()
+                    // Run cleanup only when overdue (first install or >7 days since last run), not every cold start
+                    performCleanupIfNecessary()
 
                     self.initState.complete = true
 
@@ -356,9 +357,15 @@ extension Notification.Name {
             /// If the App goes to the background we should ensure that all the changes are saved from the viewContext to the Persistent Container
             if newScenePhase == .background {
                 coreDataStack.save()
+                if #available(iOS 16.2, *) {
+                    resolver.resolve(LiveActivityManager.self)?.setBackgroundThrottling(enabled: true)
+                }
             }
 
             if newScenePhase == .active {
+                if #available(iOS 16.2, *) {
+                    resolver.resolve(LiveActivityManager.self)?.setBackgroundThrottling(enabled: false)
+                }
                 if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
                    let rootVC = windowScene.windows.first(where: { $0.isKeyWindow })?.rootViewController
                 {
@@ -414,12 +421,36 @@ extension Notification.Name {
     }
 
     private func performCleanupIfNecessary() {
-        if let lastCleanupDate = PropertyPersistentFlags.shared.lastCleanupDate {
-            let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
-            if lastCleanupDate < sevenDaysAgo {
-                cleanupOldData()
-            }
+        guard let lastCleanupDate = PropertyPersistentFlags.shared.lastCleanupDate else {
+            cleanupOldData()
+            return
         }
+        let sevenDaysAgo = Date().addingTimeInterval(-7 * 24 * 60 * 60)
+        if lastCleanupDate < sevenDaysAgo {
+            cleanupOldData()
+        }
+    }
+
+    /// Trims in-memory caches when safe. Only resets viewContext while foregrounded and idle.
+    @MainActor static func trimMemoryCaches(reason: String) {
+        let apsManager = resolver.resolve(APSManager.self)!
+        let appState = UIApplication.shared.applicationState
+        let canResetViewContext = appState == .active && !apsManager.isLooping.value
+
+        if canResetViewContext {
+            CoreDataStack.shared.trimViewContext()
+            Foundation.NotificationCenter.default.post(name: .memoryPressureTrimUICaches, object: nil)
+        } else {
+            debug(
+                .default,
+                "[MemoryPressure] Skipping viewContext reset (\(reason), appState=\(appState.rawValue), looping=\(apsManager.isLooping.value))"
+            )
+        }
+
+        if #available(iOS 16.2, *) {
+            resolver.resolve(LiveActivityManager.self)?.trimInMemoryCaches()
+        }
+        debug(.default, "[MemoryPressure] Trimmed caches (\(reason))")
     }
 
     private func cleanupOldData() {
