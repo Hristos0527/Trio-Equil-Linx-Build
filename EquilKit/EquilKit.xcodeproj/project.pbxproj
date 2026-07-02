@@ -123,6 +123,7 @@
 		E1A001032D80D25D00264890 /* EquilDashboardTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A001002D80D25D00264890 /* EquilDashboardTypes.swift */; };
 		E1A001042D80D25D00264891 /* EquilPumpManager+Dashboard.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A001012D80D25D00264891 /* EquilPumpManager+Dashboard.swift */; };
 		E1A001162D80D25D002648A2 /* EquilPumpManager+AlarmMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A001172D80D25D002648A2 /* EquilPumpManager+AlarmMode.swift */; };
+		E1A001182D80D25D002648A3 /* EquilPumpManager+BackgroundKeepalive.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A001192D80D25D002648A3 /* EquilPumpManager+BackgroundKeepalive.swift */; };
 		E1A001052D80D25D00264892 /* ClearAlertPacket.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E868C2C2F75BEE800ED6336 /* ClearAlertPacket.swift */; };
 		E1A001062D80D25D00264893 /* EquilPumpManager+PatchLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A001072D80D25D00264893 /* EquilPumpManager+PatchLifecycle.swift */; };
 		E1A001082D80D25D00264894 /* PatchPrimingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E24AEC12DA1727800C7733C /* PatchPrimingView.swift */; };
@@ -269,6 +270,7 @@
 		E1A001002D80D25D00264890 /* EquilDashboardTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EquilDashboardTypes.swift; sourceTree = "<group>"; };
 		E1A001012D80D25D00264891 /* EquilPumpManager+Dashboard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EquilPumpManager+Dashboard.swift"; sourceTree = "<group>"; };
 		E1A001172D80D25D002648A2 /* EquilPumpManager+AlarmMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EquilPumpManager+AlarmMode.swift"; sourceTree = "<group>"; };
+		E1A001192D80D25D002648A3 /* EquilPumpManager+BackgroundKeepalive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EquilPumpManager+BackgroundKeepalive.swift"; sourceTree = "<group>"; };
 		E1A001072D80D25D00264893 /* EquilPumpManager+PatchLifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "EquilPumpManager+PatchLifecycle.swift"; sourceTree = "<group>"; };
 		3E92D5222DA458E500E22577 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		3E9547FA2D8D962D00EEF259 /* EquilPrimePatchResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EquilPrimePatchResult.swift; sourceTree = "<group>"; };
@@ -606,6 +608,7 @@
 				B7189AE52C15A52800703DE2 /* EquilPumpManager.swift */,
 				E1A001012D80D25D00264891 /* EquilPumpManager+Dashboard.swift */,
 				E1A001172D80D25D002648A2 /* EquilPumpManager+AlarmMode.swift */,
+				E1A001192D80D25D002648A3 /* EquilPumpManager+BackgroundKeepalive.swift */,
 				E1A001072D80D25D00264893 /* EquilPumpManager+PatchLifecycle.swift */,
 				E1A001002D80D25D00264890 /* EquilDashboardTypes.swift */,
 				F1A001012D80D25D0026488B /* EquilPumpManager+Scanning.swift */,
@@ -942,6 +945,7 @@
 				E1A001032D80D25D00264890 /* EquilDashboardTypes.swift in Sources */,
 				E1A001042D80D25D00264891 /* EquilPumpManager+Dashboard.swift in Sources */,
 				E1A001162D80D25D002648A2 /* EquilPumpManager+AlarmMode.swift in Sources */,
+				E1A001182D80D25D002648A3 /* EquilPumpManager+BackgroundKeepalive.swift in Sources */,
 				E1A001062D80D25D00264893 /* EquilPumpManager+PatchLifecycle.swift in Sources */,
 				E1A001082D80D25D00264894 /* PatchPrimingView.swift in Sources */,
 				E1A001092D80D25D00264895 /* PatchPrimingViewModel.swift in Sources */,

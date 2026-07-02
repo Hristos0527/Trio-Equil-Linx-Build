@@ -43,6 +43,12 @@ public final class EquilPumpManager: DeviceManager {
     /// Throttle battery-only CmdHistoryGet when full sync is gated by `lastSync`.
     private var lastBatteryFetchAttempt = Date.distantPast
 
+    // Background keepalive (Build #53)
+    var backgroundKeepaliveTimer: DispatchSourceTimer?
+    let backgroundKeepaliveQueue = DispatchQueue(label: "org.nightscout.EquilKit.backgroundKeepalive")
+    var lastBackgroundKeepaliveAt = Date.distantPast
+    var appIsInBackground = false
+
     public var rawState: PumpManager.RawStateValue { state.rawValue }
 
     public init(state: EquilPumpState) {
@@ -57,6 +63,7 @@ public final class EquilPumpManager: DeviceManager {
         }
         clearStaleInFlightBolus(trigger: "init")
         completeBolusIfNeeded(trigger: "init")
+        setupBackgroundKeepaliveObservers()
     }
 
     public required convenience init?(rawState: RawStateValue) {
@@ -423,7 +430,7 @@ public extension EquilPumpManager {
     }
 
     /// Egy CmdRunningModeGet BLE round-trip a loop előtt; executeWithRetry kezeli a connection timeout-ot.
-    private func pingPumpReachability(completion: @escaping (Bool) -> Void) {
+    func pingPumpReachability(completion: @escaping (Bool) -> Void) {
         guard state.isOnboarded, !state.deviceToken.isEmpty else {
             completion(false)
             return
