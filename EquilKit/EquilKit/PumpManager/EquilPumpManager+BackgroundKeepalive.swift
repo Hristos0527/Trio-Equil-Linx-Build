@@ -30,7 +30,6 @@ extension EquilPumpManager {
 
     @objc private func equilAppDidEnterBackground() {
         appIsInBackground = true
-        log.info("Equil BG keepalive: háttér — időzítő indul")
         EquilLogBuffer.shared.append(
             "Equil BG keepalive: háttér — időzítő indul",
             category: "EquilPumpManager",
@@ -42,7 +41,11 @@ extension EquilPumpManager {
     @objc private func equilAppWillEnterForeground() {
         appIsInBackground = false
         stopBackgroundKeepaliveTimer()
-        log.info("Equil BG keepalive: előtér — időzítő leáll")
+        EquilLogBuffer.shared.append(
+            "Equil BG keepalive: előtér — időzítő leáll",
+            category: "EquilPumpManager",
+            level: .info
+        )
     }
 
     /// Feltételek: párosítva, priming kész, nem szándékos suspend, nincs aktív bólusz/priming fill.
