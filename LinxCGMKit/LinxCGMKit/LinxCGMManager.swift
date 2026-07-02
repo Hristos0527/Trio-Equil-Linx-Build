@@ -2,6 +2,9 @@ import Foundation
 import HealthKit
 import LoopKit
 import os.log
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public protocol LinxStateObserver: AnyObject {
     func linxStateDidUpdate(_ state: LinxCGMManagerState)
@@ -210,7 +213,9 @@ public class LinxCGMManager: CGMManager {
     // MARK: - CGMManager metódusok
 
     public func fetchNewDataIfNeeded(_ completion: @escaping (CGMReadingResult) -> Void) {
+        scanner.restartScanIfStale(lastDataAt: lastSampleSentAt)
         scanner.resumeScanning()
+        logBackgroundScanDiagnostics(trigger: "heartbeat")
         completion(.noData)
     }
 
@@ -246,6 +251,57 @@ public class LinxCGMManager: CGMManager {
             message: message,
             completion: nil
         )
+    }
+
+    private func logBackgroundScanDiagnostics(trigger: String) {
+        let appState = linxAppStateLabel()
+
+        let sampleAge: String
+        if let sentAt = lastSampleSentAt {
+            sampleAge = String(format: "%.0fs", Date().timeIntervalSince(sentAt))
+        } else {
+            sampleAge = "never"
+        }
+        let advAge: String
+        if let advAt = scanner.lastAdvertisementAt {
+            advAge = String(format: "%.0fs", Date().timeIntervalSince(advAt))
+        } else {
+            advAge = "never"
+        }
+        let restartAge: String
+        if let restartAt = scanner.lastScanRestartAt {
+            restartAge = String(format: "%.0fs", Date().timeIntervalSince(restartAt))
+        } else {
+            restartAge = "never"
+        }
+
+        let message = """
+        Linx bg-scan [\(trigger)]: app=\(appState) scanning=\(scanner.isScanning) \
+        lastSample=\(sampleAge) lastAdv=\(advAge) lastRestart=\(restartAge)
+        """
+        os_log("%{public}@", log: log, type: .info, message)
+        logDeviceCommunication(message, type: .connection)
+    }
+
+    private func linxAppStateLabel() -> String {
+        #if canImport(UIKit)
+        let state: UIApplication.State
+        if Thread.isMainThread {
+            state = UIApplication.shared.applicationState
+        } else {
+            state = DispatchQueue.main.sync {
+                UIApplication.shared.applicationState
+            }
+        }
+        switch state {
+        case .active: return "active"
+        case .inactive: return "inactive"
+        case .background: return "background"
+        @unknown default: return "unknown(\(state.rawValue))"
+        }
+        #else
+        return "unknown"
+        #endif
     }
 
     /// A legutóbbi mérés GlucoseDisplayable-ként (HUD-hoz).

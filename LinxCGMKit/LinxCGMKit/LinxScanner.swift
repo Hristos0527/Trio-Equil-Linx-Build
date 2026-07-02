@@ -1,5 +1,9 @@
 import CoreBluetooth
 import Foundation
+import os.log
+#if canImport(UIKit)
+import UIKit
+#endif
 
 public protocol LinxScannerDelegate: AnyObject {
     /// Új, dekódolható mérés érkezett a megadott (vagy bármelyik, ha nincs
@@ -22,13 +26,22 @@ public final class LinxScanner: NSObject {
     /// A Linx szenzor által hirdetett service-UUID (16-bit SIG: 181F).
     public static let linxServiceUUID = CBUUID(string: "181F")
 
+    /// Háttérben ennyi csend után újraindítjuk a scant (watchdog).
+    public static let backgroundScanStaleInterval: TimeInterval = 4 * 60
+
     /// A gyártói ID a manufacturer data első 2 bájtja, little-endian (Nordic).
     private let expectedManufacturerID: UInt16 = 0x0059
+
+    private let log = OSLog(subsystem: "com.linxcgmkit", category: "LinxScanner")
 
     private var central: CBCentralManager?
     private var lastSeen: [UUID: Date] = [:]
 
     public private(set) var isScanning: Bool = false
+    /// Utolsó érvényes Linx manufacturer advertisement ideje (dekódolástól függetlenül).
+    public private(set) var lastAdvertisementAt: Date?
+    /// Utolsó háttér scan-kick / watchdog restart ideje.
+    public private(set) var lastScanRestartAt: Date?
 
     override public init() {
         super.init()
@@ -61,7 +74,12 @@ public final class LinxScanner: NSObject {
         ensureCentral()
         switch central?.state {
         case .poweredOn:
-            startScan()
+            if isAppInBackground, isScanning {
+                // Háttérben a Loop heartbeat-jén frissítjük a scan ciklust.
+                restartScan(reason: "heartbeat kick")
+            } else {
+                startScan()
+            }
         case .none,
              .some(.resetting),
              .some(.unknown):
@@ -73,15 +91,72 @@ public final class LinxScanner: NSObject {
         }
     }
 
+    /// Ha háttérben túl régóta nincs friss adat, stopScan → startScan.
+    public func restartScanIfStale(lastDataAt: Date?) {
+        guard isAppInBackground else { return }
+        let reference = [lastDataAt, lastAdvertisementAt]
+            .compactMap { $0 }
+            .max()
+        if let reference, Date().timeIntervalSince(reference) < Self.backgroundScanStaleInterval {
+            return
+        }
+        restartScan(reason: "watchdog stale")
+    }
+
     private func startScan() {
         guard let central = central, central.state == .poweredOn else { return }
-        // HÁTTÉR-BARÁT scan: konkrét service-UUID-ra szűrünk (181F).
+        // Háttérben AllowDuplicatesKey: true — iOS throttling ellen minden
+        // advertisement callbacket megkapunk; a 3 perces gate szűri a Loop kimenetet.
+        let allowDuplicates = isAppInBackground
         central.scanForPeripherals(
             withServices: [Self.linxServiceUUID],
-            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: allowDuplicates]
         )
         isScanning = true
-        notify("Scan fut (181F)...")
+        logScanDiagnostics(context: allowDuplicates ? "startScan(bg dup=1)" : "startScan(fg dup=0)")
+        notify(allowDuplicates ? "Scan fut (181F, bg duplicates)..." : "Scan fut (181F)...")
+    }
+
+    private func restartScan(reason: String) {
+        guard let central = central, central.state == .poweredOn else { return }
+        if isScanning {
+            central.stopScan()
+            isScanning = false
+        }
+        lastScanRestartAt = Date()
+        startScan()
+        logScanDiagnostics(context: "restart:\(reason)")
+    }
+
+    private var isAppInBackground: Bool {
+        #if canImport(UIKit)
+        if Thread.isMainThread {
+            return UIApplication.shared.applicationState != .active
+        }
+        return DispatchQueue.main.sync {
+            UIApplication.shared.applicationState != .active
+        }
+        #else
+        return false
+        #endif
+    }
+
+    private func logScanDiagnostics(context: String) {
+        let bg = isAppInBackground
+        let advAge: String
+        if let lastAdv = lastAdvertisementAt {
+            advAge = String(format: "%.0fs", Date().timeIntervalSince(lastAdv))
+        } else {
+            advAge = "never"
+        }
+        let restartAge: String
+        if let lastRestart = lastScanRestartAt {
+            restartAge = String(format: "%.0fs", Date().timeIntervalSince(lastRestart))
+        } else {
+            restartAge = "never"
+        }
+        let msg = "Linx scan \(context) scanning=\(isScanning) bg=\(bg) lastAdv=\(advAge) lastRestart=\(restartAge)"
+        os_log("%{public}@", log: log, type: .info, msg)
     }
 
     /// A scan leállítása és a manager elengedése (CGM törlésekor hívjuk).
@@ -149,6 +224,7 @@ extension LinxScanner: CBCentralManagerDelegate {
 
         // Biztonsági szűrés: csak Nordic (0x0059) 27-bájtos Linx csomag.
         guard mfgID == expectedManufacturerID, bytes.count == 27 else { return }
+        lastAdvertisementAt = Date()
 
         // Kiválasztó lista: CSAK olyan eszközt jelentünk a UI-nak, aminek a
         // nevében szerepel a "Linx" (más BT-eszköz sosem). Ez a sorozatszám-
