@@ -22,6 +22,8 @@ chmod +x scripts/build.sh scripts/install.sh
 
 **Full beginner guide:** [BUILD.md](BUILD.md)
 
+**Community announcement:** [WHERE_TO_CLICK.md](https://github.com/Hristos0527/EquilKit-Trio/blob/master/WHERE_TO_CLICK.md) (GitHub Issue + Discord steps)
+
 Maintainer: **Hristos** ([@Hristos0527](https://github.com/Hristos0527)) — community sideload, use at your own risk. Not a medical device.
 
 ---
