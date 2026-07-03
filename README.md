@@ -1,3 +1,31 @@
+# Trio + Equil + Linx — community build
+
+[![Build (simulator)](https://github.com/Hristos0527/Trio-Equil-Linx-Build/actions/workflows/simulator-build.yml/badge.svg)](https://github.com/Hristos0527/Trio-Equil-Linx-Build/actions/workflows/simulator-build.yml)
+
+**Pre-wired fork** of Nightscout Trio with community plugins already integrated:
+
+| Plugin | Hardware | Repo |
+|--------|----------|------|
+| **EquilKit** | Equil patch pump (BLE) | [EquilKit-Trio](https://github.com/Hristos0527/EquilKit-Trio) |
+| **LinxCGMKit** | Linx CGM (passive BLE) | [LinxCGMKit-Trio](https://github.com/Hristos0527/LinxCGMKit-Trio) |
+| **Omnipod 5** | OP5 pods (upstream Trio) | Included from upstream |
+
+### Quick start (one command)
+
+```bash
+git clone --recurse-submodules https://github.com/Hristos0527/Trio-Equil-Linx-Build.git
+cd Trio-Equil-Linx-Build
+chmod +x scripts/build.sh scripts/install.sh
+./scripts/build.sh          # builds for your iPhone
+./scripts/install.sh        # installs to connected iPhone
+```
+
+**Full beginner guide:** [BUILD.md](BUILD.md)
+
+Maintainer: **Hristos** ([@Hristos0527](https://github.com/Hristos0527)) — community sideload, use at your own risk. Not a medical device.
+
+---
+
 # Trio &nbsp;&nbsp;&nbsp;[![Discord](https://img.shields.io/discord/1020905149037813862?label=Discord&logo=discord&logoColor=white&color=5865F2)](https://discord.triodocs.org)
 
 ## Introduction

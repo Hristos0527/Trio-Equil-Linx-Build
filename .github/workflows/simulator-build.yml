@@ -1,0 +1,45 @@
+name: Simulator build
+
+on:
+  push:
+    branches: [main, master, public-build]
+  pull_request:
+    branches: [main, master, public-build]
+  workflow_dispatch:
+
+jobs:
+  build-simulator:
+    name: Build Trio (simulator)
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_16.4.app/Contents/Developer
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: List simulators
+        run: xcrun simctl list devices available
+
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -workspace Trio.xcworkspace \
+            -scheme Trio \
+            -configuration Debug \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=18.5' \
+            -derivedDataPath DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee build.log
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
